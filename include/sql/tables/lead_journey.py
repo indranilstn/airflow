@@ -19,8 +19,8 @@ def get_journey_model(metadata: MetaData|None = None):
             id: int|None = Field(default=None, primary_key=True)
             event_id: int = Field(nullable=False, foreign_key="events.id", unique=True)
             location_id: int = Field(nullable=False, foreign_key="locations.id")
-            contact_master_id: int = Field(nullable=False, foreign_key="contact_master.id")
-            unit_id: int|None = Field(default=None)
+            primary_master_id: int = Field(nullable=False, foreign_key="contact_master.id")
+            secondary_master_id: int|None = Field(foreign_key="contact_master.id")
 
         return LeadJourney
 
@@ -31,7 +31,7 @@ def get_journey_model(metadata: MetaData|None = None):
             Column("id", Integer, primary_key=True, autoincrement=True),
             Column("event_id", Integer, ForeignKey("events.id"), nullable=False, unique=True),
             Column("location_id", Integer, ForeignKey("locations.id"), nullable=False),
-            Column("contact_master_id", String, ForeignKey("contact_master.id"), nullable=False),
-            Column("unit_id", Integer, default=None),
+            Column("primary_master_id", String, ForeignKey("contact_master.id"), nullable=False),
+            Column("secondary_master_id", String, ForeignKey("contact_master.id")),
             *temporal_model
         )

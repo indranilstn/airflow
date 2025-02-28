@@ -100,7 +100,8 @@ def process_event(event_id: int):
             conn.execute(insert(lead_journey), [{
                 'event_id': event_id,
                 'location_id': location_id,
-                'contact_master_id': master_email or master_phone,
+                'primary_master_id': master_email or master_phone,
+                'secondary_master_id': master_phone if master_email else None,
             }])
 
         except IntegrityError:
