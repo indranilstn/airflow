@@ -3,7 +3,7 @@ from airflow.models.param import Param
 from pendulum import datetime
 from logging import getLogger
 
-from include.tasks.email_track import get_service, fetch_email
+from app.tasks.email_track import get_service, fetch_email
 
 @dag(
     dag_id="lt_email_track_service",
@@ -20,10 +20,10 @@ from include.tasks.email_track import get_service, fetch_email
 )
 def email_tracking_dag():
     @task
-    def save_emails(**kwargs):
+    def save_emails(**context):
         logger = getLogger(__name__)
 
-        params = kwargs.get("params")
+        params = context.get("params")
         file_path = params.get("file_path") or ""
 
         service = get_service(file_path=file_path)

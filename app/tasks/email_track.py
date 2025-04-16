@@ -1,29 +1,28 @@
 import os
 import re
-# from typing import Optional
-
-from langchain.globals import set_verbose, set_debug
+# from langchain.globals import set_verbose, set_debug
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import ChatOpenAI
+# from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.documents import Document
 from langchain_community.document_transformers import Html2TextTransformer
 
-from airflow.providers.postgres.hooks.postgres import PostgresHook
-from sqlalchemy import MetaData, insert, select, desc
+from sqlalchemy import select #, desc
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 
-from include.sql.tables.tracking_email import get_tracking_email
-from include.emails.base_email import EmailService as BaseService
-from include.emails.gmail import Gmail as GmailService
-from include.emails.raw_email import RawEmailHandler
-from include.sql.tables.contacts import get_contacts_model
-from include.sql.tables.events import get_events_model, EventType
+from app.emails.base_email import EmailService as BaseService
+from app.emails.gmail import Gmail as GmailService
+from app.emails.raw_email import RawEmailHandler
+from app.orm.models.tracking_email import TrackerEmail
+from app.orm.models.contacts import Contact
+from app.orm.models.events import Event, EventType
+from app.orm import get_pg_session
+from . import AppContext
 
 USER_EMAIL = "indranil@softechnation.com"
-LOCATION_PATTERN = r"indranil\+([^\+\s]+).*@softechnation.com"
+INFO_PATTERN = r"indranil\+([^\+]+)\+([^\+]+).*@softechnation.com"
 
 class _SourceStruct(BaseModel):
     """Extract source from email subject"""
@@ -54,40 +53,26 @@ def get_service(user_email: str = "", *, file_path: str = "") -> BaseService|Non
 
     return service if service.authenticate(email) else None
 
-def fetch_email(service: BaseService) -> None:
-    engine = (
-        PostgresHook(postgres_conn_id=os.environ['APP__DATABASE__CONN_ID'])
-            .get_sqlalchemy_engine()
-    )
+def fetch_email(service: BaseService) -> int:
+    postgres_conn_id = os.environ['APP__DATABASE__CONN_ID'] or None
 
-    sql_meta = MetaData()
-    tracker = get_tracking_email(metadata=sql_meta)
-    insert_stmt = insert(tracker)
+    tracker_id = None
+    with get_pg_session(postgres_conn_id) as session:
+        for headers, body in service.get_emails(1):
+            msg_id = headers.get('Message-ID') or headers.get('Message-Id') or None
+            header_str = str(headers)
 
-    with engine.connect() as conn:
-        transaction = conn.begin()
-        try:
-            for headers, body in service.get_emails(1):
+            if re.search(r"indranil\+[^@]+@softechnation.com", header_str):
+                tracker = TrackerEmail(headers=headers, body=body, msg_id=msg_id)
+                with session.begin():
+                    session.add(tracker)
+                    session.commit()
 
-                msg_id = headers.get('Message-ID') or headers.get('Message-Id') or None
-                params = {
-                    'headers': headers,
-                    'body': body,
-                    'msg_id': msg_id
-                }
-                # print(params)
+                    tracker_id = tracker.id
 
-                header_str = str(params['headers'])
-                if re.search(r"indranil\+[^@]+@softechnation.com", header_str):
-                    conn.execute(insert_stmt, [params])
+    return tracker_id
 
-            transaction.commit()
-
-        except:
-            transaction.rollback()
-            raise
-
-def parse_email():
+def parse_email(tracking_id: int) -> AppContext:
     """Parse user information in the email body
 
     Raises:
@@ -95,26 +80,34 @@ def parse_email():
         Exception: on missing prospect email address
     """
 
-    engine = (
-        PostgresHook(postgres_conn_id=os.environ['APP__DATABASE__CONN_ID'])
-            .get_sqlalchemy_engine()
-    )
-
-    sql_meta = MetaData()
-    tracker = get_tracking_email(metadata=sql_meta)
-    select_stmt = select(tracker.c.id, tracker.c.headers, tracker.c.body).order_by(desc(tracker.c.id))
+    postgres_conn_id = os.environ['APP__DATABASE__CONN_ID'] or None
 
     contact_id = None
-    with engine.connect() as conn:
-        (tracker_id, headers, body) = conn.execute(select_stmt).first()
+    event_id = None
+    with get_pg_session(postgres_conn_id) as session:
+        tracker = session.scalar(
+            select(TrackerEmail)
+            .where(TrackerEmail.id == tracking_id)
+            # .order_by(desc(TrackerEmail.id))
+            # .limit(1)
+        )
 
-        flat_headers = ", ".join(list(headers.values()))
-        matched = re.search(LOCATION_PATTERN, flat_headers)
-        location = matched.group(1) if matched else None
-        if not location:
-            raise Exception("Location not found")
+        flat_headers = ", ".join(list(tracker.headers.values()))
+        matched = re.search(INFO_PATTERN, flat_headers)
+
+        client = None
+        location = None
+        if matched:
+            client = matched.group(1)
+            location = matched.group(2)
+
+        if not (client and location):
+            raise Exception("Client and/or Location not found")
+
+        session.set_schema(schema=client)
 
         prospect = None
+        body = tracker.body
         for part in body:
             output = None
             if "text/plain" in part:
@@ -132,10 +125,10 @@ def parse_email():
 
         name_from_header = None
         email_from_header = None
-        if not prospect.email and "Reply-To" in headers:
+        if not prospect.email and "Reply-To" in tracker.headers:
             # Unicode-compatible pattern for name and email address
             pattern = r"(?P<name>[\w\s\u0080-\uFFFF]+)?\s*(<(?P<email>[^>]+)>|(?P<email_only>[^@\s]+@[^@\s]+))?"
-            matched = re.search(pattern, headers['Reply-To'])
+            matched = re.search(pattern, tracker.headers['Reply-To'])
 
             if matched:
                 name_from_header = matched.group("name") and matched.group("name").strip() or None
@@ -155,56 +148,46 @@ def parse_email():
                 prospect.name = name_from_header
 
         source_from_header = None
-        if not prospect.source and "Subject" in headers:
-            source_from_header = _ask_ai_source(headers['Subject'])
+        if not prospect.source and "Subject" in tracker.headers:
+            source_from_header = _ask_ai_source(tracker.headers['Subject'])
             if source_from_header:
                 prospect.source = source_from_header
 
-        contacts = get_contacts_model(metadata=sql_meta)
-        insert_contacts = insert(contacts).returning(contacts.c.id)
+        contact = Contact(name=prospect.name, email=prospect.email, phone=prospect.phone)
 
-        events = get_events_model(metadata=sql_meta)
-        insert_events = insert(events).returning(events.c.id)
-
-        # transaction = conn.begin()
-        try:
+        with session.begin():
             try:
-                result_contacts = conn.execute(insert_contacts, [{
-                    'name': prospect.name,
-                    'email': prospect.email,
-                    'phone': prospect.phone,
-                }])
+                session.add(contact)
+                session.flush()
             except IntegrityError:
-                result_contacts = conn.execute(select(contacts.c.id).where(
-                    contacts.c.name == prospect.name,
-                    contacts.c.email == prospect.email,
-                    contacts.c.phone == prospect.phone,
-                ))
+                contact_id = session.scalar(
+                    select(Contact.id).where(
+                        Contact.name == prospect.name,
+                        Contact.email == prospect.email,
+                        Contact.phone == prospect.phone,
+                    )
+                )
 
-            contact_id = result_contacts.scalar()
             if not contact_id:
-                raise ValueError(f"Invalid contact information in tracker email: {tracker_id}")
+                raise ValueError(f"Invalid contact information in tracker email: {tracker.id}")
 
-            insert_params = {
-                'type': EventType.EMAIL,
-                'contact_id': contact_id,
-                'source': prospect.source,
-                'unit_type': prospect.unit,
-                'location_marker': location,
-                'data': {'location': prospect.location, 'address': prospect.address},
-            }
-            # print(insert_params)
+            event = Event(
+                type=EventType.EMAIL,
+                contact_id=contact_id,
+                source=prospect.source,
+                unit_type=prospect.unit,
+                location_marker=location,
+                data={'location': prospect.location, 'address': prospect.address},
+            )
 
-            result_events = conn.execute(insert_events, [insert_params])
+            session.add(event)
+            session.flush()
 
-            event_id = result_events.scalar()
-            # transaction.commit()
+            event_id = event.id
 
-        except:
-            # transaction.rollback()
-            raise
+            session.commit()
 
-    return event_id
+    return AppContext(client=client, data={ 'event_id': event_id })
 
 def _parse_text_body(content: list[str]) -> _OutputStruct|None:
     for body in content:

@@ -9,7 +9,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from include.emails.base_email import EmailService
+from app.emails.base_email import EmailService
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 ACCOUNT_FILE = os.environ['GOOGLE_APPLICATION_CREDENTIALS']

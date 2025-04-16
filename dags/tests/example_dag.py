@@ -1,18 +1,17 @@
-import textwrap
+import logging
 from datetime import datetime, timedelta
+from airflow.decorators import dag, task, task_group
+from app.tasks import get_branch_result_task, get_branch_task_id
 
-# The DAG object; we'll need this to instantiate a DAG
-from airflow.models.dag import DAG
+logger = logging.getLogger("airflow.task")
 
-# Operators; we need this to operate!
-from airflow.operators.bash import BashOperator
-with DAG(
-    "my_tutorial",
+@dag(
+    dag_id="my_example_dag",
     # These args will get passed on to each operator
     # You can override them on a per-task basis during operator initialization
     default_args={
         "depends_on_past": False,
-        "email": ["airflow@example.com"],
+        "email": ["indranil@softechnation.com"],
         "email_on_failure": False,
         "email_on_retry": False,
         "retries": 1,
@@ -31,53 +30,63 @@ with DAG(
         # 'on_skipped_callback': another_function, #or list of functions
         # 'trigger_rule': 'all_success'
     },
-    description="A simple tutorial DAG",
-    schedule=timedelta(days=1),
+    description="A simple test DAG",
+    schedule=None,
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=["example"],
-) as dag:
+)
+def my_example_dag_func():
 
-    # t1, t2 and t3 are examples of tasks created by instantiating operators
-    t1 = BashOperator(
-        task_id="print_date",
-        bash_command="date",
-    )
+    @task
+    def start():
+        print("In start")
+        return {'data': "Some data"}
 
-    t2 = BashOperator(
-        task_id="sleep",
-        depends_on_past=False,
-        bash_command="sleep 5",
-        retries=3,
-    )
-    t1.doc_md = textwrap.dedent(
-        """\
-    #### Task Documentation
-    You can document your task using the attributes `doc_md` (markdown),
-    `doc` (plain text), `doc_rst`, `doc_json`, `doc_yaml` which gets
-    rendered in the UI's Task Instance Details page.
-    ![img](https://imgs.xkcd.com/comics/fixing_problems.png)
-    **Image Credit:** Randall Munroe, [XKCD](https://xkcd.com/license.html)
-    """
-    )
+    @task_group(group_id="my_group")
+    def group(data: dict):
+        print("In group")
+        logger.info("In group")
 
-    dag.doc_md = __doc__  # providing that you have a docstring at the beginning of the DAG; OR
-    dag.doc_md = """
-    This is a documentation placed anywhere
-    """  # otherwise, type it like this
-    templated_command = textwrap.dedent(
-        """
-    {% for i in range(5) %}
-        echo "{{ ds }}"
-        echo "{{ macros.ds_add(ds, 7)}}"
-    {% endfor %}
-    """
-    )
+        @task.branch(task_id="branch")
+        def branch(**context):
+            print("In branch")
+            logger.info("In branch")
 
-    t3 = BashOperator(
-        task_id="templated",
-        depends_on_past=False,
-        bash_command=templated_command,
-    )
+            return get_branch_task_id("first", context)
 
-    t1 >> [t2, t3]
+        @task(task_id="first")
+        def first(data: dict):
+            print("In first")
+            logger.info("In first")
+            return data
+
+        @task(task_id="second")
+        def second(data: dict, **context):
+            print("In second")
+            print(context)
+            logger.info("In second")
+            return data
+
+        br_task = branch()
+
+        fi_task = first(data)
+        se_task = second(data)
+        re_task = get_branch_result_task(branch_task="branch")()
+
+        result = (br_task >> [fi_task, se_task] >> re_task)
+
+        return result
+
+    @task
+    def end(data):
+        print("In end")
+        logger.info("In end")
+
+        return data
+
+    s_output = start()
+    gr_task = group(s_output)
+    end(gr_task)
+
+my_example_dag_func()
