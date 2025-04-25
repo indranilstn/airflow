@@ -12,7 +12,7 @@ except ModuleNotFoundError:
     sql_model_found = False
 
 tablename = "app_tokens"
-_client_key = f"{clients_tablename}.id"
+_client_key = f"public.{clients_tablename}.id"
 
 if sql_model_found:
     class AppToken(TemporalModel, table=True, metadata=SQLBase.metadata):
@@ -24,6 +24,10 @@ if sql_model_found:
         token: str = Field(default_factory=lambda: generate_nanoid(size=14), unique=True)
         active: bool = True
 
+        __table_args__ = {
+            'schema': "public",
+        }
+
 else:
     class AppToken(SQLBase, TemporalModel):
         __tablename__ = tablename
@@ -33,3 +37,7 @@ else:
         app = Column(String, nullable=False, unique=True)
         token = Column(String, nullable=False, default=lambda: generate_nanoid(size=14))
         active = Column(Boolean, default=True)
+
+        __table_args__ = {
+            'schema': "public",
+        }

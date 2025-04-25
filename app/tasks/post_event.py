@@ -1,4 +1,4 @@
-import os
+from os import getenv
 from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 
@@ -23,7 +23,7 @@ def process_event(context: AppContext) -> AppContext:
     if not event_id:
         raise Exception("Event not found")
 
-    postgres_conn_id=os.environ['APP__DATABASE__CONN_ID'] or None
+    postgres_conn_id=getenv('APP__DATABASE__CONN_ID')
 
     select_stmt = select(
         Event.type,
@@ -86,7 +86,7 @@ def process_event(context: AppContext) -> AppContext:
             try:
                 session.execute(
                     insert(LeadJourney)
-                    .value(
+                    .values(
                         event_id=event_id,
                         location_id=location_id,
                         primary_master_id=master_email_id or master_phone_id,

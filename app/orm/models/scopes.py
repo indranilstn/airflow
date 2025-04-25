@@ -18,6 +18,10 @@ if sql_model_found:
         name: str = Field(unique=True)
         description: str|None = None
 
+        __table_args__ = {
+            'schema': "public",
+        }
+
 else:
     class Scope(SQLBase, TemporalModel):
         __tablename__ = tablename
@@ -25,3 +29,7 @@ else:
         id = Column(Integer, primary_key=True, autoincrement=True)
         name = Column(String, nullable=False, unique=True)
         description = Column(String, default=None)
+
+        __table_args__ = {
+            'schema': "public",
+        }

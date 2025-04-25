@@ -21,9 +21,13 @@ if sql_model_found:
         __tablename__ = tablename
 
         id: int|None = Field(default=None, primary_key=True)
-        client_id = int = Field(foreign_key=_client_key)
+        client_id: int = Field(foreign_key=_client_key)
         token_id: int = Field(foreign_key=_token_key)
         scope_id: int = Field(foreign_key=_scope_key)
+
+        __table_args__ = {
+            'schema': "public",
+        }
 
 else:
     class TokenScope(SQLBase, TemporalModel):
@@ -33,3 +37,7 @@ else:
         client_id = Column(Integer, ForeignKey(_client_key))
         token_id = Column(String, ForeignKey(_token_key))
         scope_id = Column(Integer, ForeignKey(_scope_key))
+
+        __table_args__ = {
+            'schema': "public",
+        }

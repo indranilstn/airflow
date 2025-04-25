@@ -1,5 +1,5 @@
-import os
 import re
+from os import getenv
 # from langchain.globals import set_verbose, set_debug
 from langchain_google_genai import ChatGoogleGenerativeAI
 # from langchain_openai import ChatOpenAI
@@ -54,7 +54,7 @@ def get_service(user_email: str = "", *, file_path: str = "") -> BaseService|Non
     return service if service.authenticate(email) else None
 
 def fetch_email(service: BaseService) -> int:
-    postgres_conn_id = os.environ['APP__DATABASE__CONN_ID'] or None
+    postgres_conn_id = getenv('APP__DATABASE__CONN_ID')
 
     tracker_id = None
     with get_pg_session(postgres_conn_id) as session:
@@ -80,7 +80,7 @@ def parse_email(tracking_id: int) -> AppContext:
         Exception: on missing prospect email address
     """
 
-    postgres_conn_id = os.environ['APP__DATABASE__CONN_ID'] or None
+    postgres_conn_id = getenv('APP__DATABASE__CONN_ID')
 
     contact_id = None
     event_id = None
@@ -220,7 +220,7 @@ def _ask_ai(content: str) -> _OutputStruct:
         ("user", "Extract the prospect information in the format provided, from the following email: {body}"),
     ]).partial(format_instructions=parser.get_format_instructions())
 
-    api_key = os.environ['GOOGLE_GEMINI_API_KEY']
+    api_key = getenv('GOOGLE_GEMINI_API_KEY')
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
         temperature=0.0,
@@ -255,7 +255,7 @@ def _ask_ai_source(content: str) -> str|None:
         ("user", "Extract the source of the email from the subject line: {subject}"),
     ]).partial(format_instructions=parser.get_format_instructions())
 
-    api_key = os.environ['GOOGLE_GEMINI_API_KEY']
+    api_key = getenv('GOOGLE_GEMINI_API_KEY')
     gllm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
         temperature=0.1,

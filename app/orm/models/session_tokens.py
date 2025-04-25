@@ -31,6 +31,10 @@ if sql_model_found:
             default_factory=lambda: datetime.now(ZoneInfo("UTC")) + timedelta(hours=1)
         )
 
+        __table_args__ = {
+            'schema': "public",
+        }
+
 else:
     class SessionToken(SQLBase, TemporalModel):
         __tablename__ = tablename
@@ -40,3 +44,7 @@ else:
         app_id = Column(Integer, ForeignKey(_app_key), nullable=False)
         token = Column(String, nullable=False, default=lambda: generate_nanoid(size=14), unique=True)
         valid_till = Column(DateTime(timezone=True), default=lambda: datetime.now(ZoneInfo("UTC")) + timedelta(hours=1))
+
+        __table_args__ = {
+            'schema': "public",
+        }

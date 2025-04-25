@@ -1,6 +1,5 @@
 from enum import Enum
 # from pydantic import BaseModel, Field, EmailStr, field_validator
-
 from sqlalchemy import Column, Integer, Enum as SqlEnum, ForeignKey
 # from sqlalchemy.dialects.postgresql import JSONB
 from core.utility import enum_values_callable

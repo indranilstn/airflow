@@ -26,6 +26,10 @@ if sql_model_found:
         scope_id: str = Field(foreign_key=_scope_key)
         default: bool = False
 
+        __table_args__ = {
+            'schema': "public",
+        }
+
 else:
     class AppScope(SQLBase, TemporalModel):
         __tablename__ = tablename
@@ -35,3 +39,7 @@ else:
         app_id = Column(String, ForeignKey(_app_key))
         scope_id = Column(String, ForeignKey(_scope_key))
         default = Column(Boolean, default=False)
+
+        __table_args__ = {
+            'schema': "public",
+        }

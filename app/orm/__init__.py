@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from sqlalchemy import text
 from sqlalchemy.orm import declarative_base, Session
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from app.tasks import AppContext
@@ -11,12 +12,13 @@ class ContextSession(Session):
 
         if schema:
             db_schema = schema
+
         elif context:
             client = context.get("client", None)
             if client:
                 db_schema = f"{client}, public, _rrule"
 
-        self.bind.execute(f"SET search_path TO {db_schema}")
+        self.execute(text(f"SET search_path TO {db_schema}"))
 
 @contextmanager
 def get_pg_session(connection_id, schema: str|None = None, context: AppContext|None = None):

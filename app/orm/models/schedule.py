@@ -19,7 +19,7 @@ _location_foreign_key = f"{locations_tablename}.id"
 
 class ScheduleType(Enum):
     APPOINTMENT = "Appointment"
-    OUT_OF_OFFICE = "Out of office"
+    OUT_OF_OFFICE = "Out of Office"
     HOLIDAY = "Holiday"
     LOCATION = "Location"
 
@@ -38,7 +38,14 @@ if sql_model_found:
         end: datetime = Field(sa_type=DateTime(True))
 
         __table_args__ = (
-            Index("agent_id", "location_id", name="schedule_agent_location_idx")
+            Index("agent_id", "location_id", name="schedule_agent_location_idx"),
+            Index(
+                "agent_id",
+                "start",
+                name="schedule_agent_start_uid",
+                unique=True,
+                postgresql_where=(type == ScheduleType.APPOINTMENT)
+            ),
         )
 
 else:
@@ -53,5 +60,12 @@ else:
         end = Column(DateTime(True))
 
         __table_args__ = (
-            Index("agent_id", "location_id", name="schedule_agent_location_idx")
+            Index("agent_id", "location_id", name="schedule_agent_location_idx"),
+            Index(
+                "agent_id",
+                "start",
+                name="schedule_agent_start_uid",
+                unique=True,
+                postgresql_where=(type == ScheduleType.APPOINTMENT)
+            ),
         )

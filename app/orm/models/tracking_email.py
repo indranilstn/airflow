@@ -21,6 +21,10 @@ if sql_model_found:
         msg_id: str = Field(unique=True)
         is_processed: bool = False
 
+        __table_args__ = {
+            'schema': "public",
+        }
+
 else:
     class TrackerEmail(SQLBase, TemporalModel):
         __tablename__ = tablename
@@ -30,3 +34,7 @@ else:
         body = Column(JSONB)
         msg_id = Column(JSONB, unique=True)
         is_processed = Column(Boolean, default=False)
+
+        __table_args__ = {
+            'schema': "public",
+        }

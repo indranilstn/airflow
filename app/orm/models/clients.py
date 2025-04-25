@@ -24,6 +24,10 @@ if sql_model_found:
         address: str|None = Field(sa_type=String(1000), default=None)
         rate_limit: int = default_rate_limit
 
+        __table_args__ = {
+            'schema': "public",
+        }
+
 else:
     class Client(SQLBase, TemporalModel):
         __tablename__ = tablename
@@ -33,3 +37,7 @@ else:
         name = Column(String, nullable=False, index=True)
         address = Column(String(1000), default=None)
         rate_limit = Column(Integer, default=default_rate_limit)
+
+        __table_args__ = {
+            'schema': "public",
+        }
