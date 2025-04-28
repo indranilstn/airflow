@@ -1,3 +1,4 @@
+from contextvars import ContextVar
 from typing import TypedDict, NotRequired, Any
 from airflow.decorators import task
 from airflow.utils.trigger_rule import TriggerRule
@@ -32,3 +33,16 @@ def get_branch_result_task(*, task_id: str = "branch_result", branch_task: str):
         task_id=task_id,
         trigger_rule=TriggerRule.ONE_SUCCESS
     )(task_func)
+
+
+CONTEXT_KEY = "app_context"
+_app_context = None
+
+def set_app_context(context: AppContext) -> None:
+    global _app_context
+    _app_context = ContextVar(CONTEXT_KEY, default=context)
+
+
+def get_app_context() -> ContextVar|None:
+    global _app_context
+    return _app_context

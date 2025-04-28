@@ -9,17 +9,15 @@ from langchain_core.documents import Document
 from langchain_community.document_transformers import Html2TextTransformer
 
 from sqlalchemy import select #, desc
-from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
-
-from app.emails.base_email import EmailService as BaseService
-from app.emails.gmail import Gmail as GmailService
-from app.emails.raw_email import RawEmailHandler
+from app.services.emails.base_email import EmailService as BaseService
+from app.services.emails.gmail import Gmail as GmailService
+from app.services.emails.raw_email import RawEmailHandler
+from app.services.contact import add_contact
 from app.orm.models.tracking_email import TrackerEmail
-from app.orm.models.contacts import Contact
 from app.orm.models.events import Event, EventType
-from app.orm import get_pg_session
-from . import AppContext
+from app.orm import get_session
+from . import AppContext, set_app_context
 
 USER_EMAIL = "indranil@softechnation.com"
 INFO_PATTERN = r"indranil\+([^\+]+)\+([^\+]+).*@softechnation.com"
@@ -54,10 +52,8 @@ def get_service(user_email: str = "", *, file_path: str = "") -> BaseService|Non
     return service if service.authenticate(email) else None
 
 def fetch_email(service: BaseService) -> int:
-    postgres_conn_id = getenv('APP__DATABASE__CONN_ID')
-
     tracker_id = None
-    with get_pg_session(postgres_conn_id) as session:
+    with get_session() as session:
         for headers, body in service.get_emails(1):
             msg_id = headers.get('Message-ID') or headers.get('Message-Id') or None
             header_str = str(headers)
@@ -80,11 +76,12 @@ def parse_email(tracking_id: int) -> AppContext:
         Exception: on missing prospect email address
     """
 
-    postgres_conn_id = getenv('APP__DATABASE__CONN_ID')
-
     contact_id = None
     event_id = None
-    with get_pg_session(postgres_conn_id) as session:
+    app_context = None
+    primary_master_id = None
+    secondary_master_id = None
+    with get_session() as session:
         tracker = session.scalar(
             select(TrackerEmail)
             .where(TrackerEmail.id == tracking_id)
@@ -104,7 +101,7 @@ def parse_email(tracking_id: int) -> AppContext:
         if not (client and location):
             raise Exception("Client and/or Location not found")
 
-        session.set_schema(schema=client)
+        session.set_client(client)
 
         prospect = None
         body = tracker.body
@@ -153,41 +150,40 @@ def parse_email(tracking_id: int) -> AppContext:
             if source_from_header:
                 prospect.source = source_from_header
 
-        contact = Contact(name=prospect.name, email=prospect.email, phone=prospect.phone)
+        app_context = AppContext(client=client)
+        set_app_context(app_context)
 
-        with session.begin():
-            try:
-                session.add(contact)
-                session.flush()
-            except IntegrityError:
-                contact_id = session.scalar(
-                    select(Contact.id).where(
-                        Contact.name == prospect.name,
-                        Contact.email == prospect.email,
-                        Contact.phone == prospect.phone,
-                    )
-                )
+        try:
+            contact_id,
+            primary_master_id,
+            secondary_master_id = add_contact(prospect.name, prospect.email, prospect.phone)
+        except ValueError:
+            raise ValueError(f"Invalid contact information in tracker email: {tracker.id}")
 
-            if not contact_id:
-                raise ValueError(f"Invalid contact information in tracker email: {tracker.id}")
+        event = Event(
+            type=EventType.EMAIL,
+            contact_id=contact_id,
+            source=prospect.source,
+            unit_type=prospect.unit,
+            location_marker=location,
+            data={'location': prospect.location, 'address': prospect.address},
+        )
 
-            event = Event(
-                type=EventType.EMAIL,
-                contact_id=contact_id,
-                source=prospect.source,
-                unit_type=prospect.unit,
-                location_marker=location,
-                data={'location': prospect.location, 'address': prospect.address},
-            )
+        session.add(event)
+        session.flush()
 
-            session.add(event)
-            session.flush()
+        event_id = event.id
 
-            event_id = event.id
+        session.commit()
 
-            session.commit()
+    if app_context:
+        app_context.data = {
+            'event_id': event_id,
+            'primary_master': primary_master_id,
+            'secondary_master': secondary_master_id,
+        }
 
-    return AppContext(client=client, data={ 'event_id': event_id })
+    return app_context
 
 def _parse_text_body(content: list[str]) -> _OutputStruct|None:
     for body in content:

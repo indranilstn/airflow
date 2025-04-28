@@ -1,7 +1,7 @@
 from pendulum import datetime
 from logging import getLogger
 from airflow.decorators import dag, task
-from app.orm import AppContext
+from app.tasks import AppContext, set_app_context
 from app.tasks.email_track import get_service, fetch_email, parse_email
 from app.tasks.post_event import process_event
 
@@ -29,6 +29,7 @@ def email_tracking_dag():
 
     @task
     def add_event(app_context: AppContext):
+        set_app_context(app_context)
         return process_event(app_context)
 
     @task(task_id="end")

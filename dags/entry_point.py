@@ -72,6 +72,6 @@ def trigger_entry():
     start_task = get_request_data()
     end_task = mark_processed()
 
-    start_task >> [trigger_task, end_task]
+    start_task >> trigger_task >> end_task
 
 trigger_entry()
