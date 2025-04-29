@@ -44,8 +44,9 @@ def email_tracking_dag():
     check = check_email(id)
     context = parse_saved_email(id)
     add = add_event(context)
+    last = end()
 
-    id >> check >> [context, end]
-    context >> add >> end
+    id >> check >> [context, last]
+    context >> add >> last
 
 email_tracking_dag()

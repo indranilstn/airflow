@@ -1,5 +1,5 @@
-from include.tasks.email_track import get_service, fetch_email, parse_email
-from include.tasks.post_event import process_event
+from app.tasks.email_track import get_service, fetch_email, parse_email
+from app.tasks.post_event import process_event
 
 # USER_EMAIL = 'indranil@softechnation.com'
 
@@ -17,7 +17,7 @@ def _test():
             fetch_email(service)
             id = parse_email()
             print(f"event id: {id}")
-            process_event(id)
+            # process_event(id)
 
     except Exception as error:
         # TODO(developer) - Handle errors from gmail API.

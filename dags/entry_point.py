@@ -1,10 +1,9 @@
-from os import getenv
 from pendulum import datetime
 from logging import getLogger
 from airflow.decorators import dag, task
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
 from sqlalchemy import select, update
-from app.orm import get_pg_session
+from app.orm import get_session
 from app.orm.models.service_requests import ServiceRequest
 from app.services.service_locator import find_service
 
@@ -26,8 +25,7 @@ def trigger_entry():
         params = context['params']
         id = params.get('id')
 
-        connection_id = getenv('APP__DATABASE__CONN_ID')
-        with get_pg_session(connection_id=connection_id) as session:
+        with get_session() as session:
             request = session.scalar(
                 select(ServiceRequest)
                 .where(ServiceRequest.id == id)
@@ -61,8 +59,7 @@ def trigger_entry():
         params = context['params']
         id = params.get('id')
 
-        connection_id = getenv('APP__DATABASE__CONN_ID')
-        with get_pg_session(connection_id=connection_id) as session:
+        with get_session() as session:
             session.execute(
                 update(ServiceRequest)
                 .where(ServiceRequest.id == id)

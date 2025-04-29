@@ -17,12 +17,12 @@ if sql_model_found:
     class ContactAssoc(SQLModel, table=True, metadata=SQLBase.metadata):
         __tablename__ = tablename
 
-        master_id: int|None = Field(default=None, foreign_key=f"{master_table}.id", primary_key=True)
-        contact_id: int = Field(default=None, foreign_key=f"{contact_table}.id", primary_key=True)
+        master_id: int = Field(foreign_key=f"{master_table}.id", primary_key=True)
+        contact_id: int = Field(foreign_key=f"{contact_table}.id", primary_key=True)
 
 else:
     class ContactAssoc(SQLBase):
         __tablename__ = tablename
 
-        master_id = Column(Integer, ForeignKey(f"{master_table}.id"), primary_key=True),
-        contact_id = Column(Integer, ForeignKey(f"{contact_table}.id"), primary_key=True),
+        master_id = Column(Integer, ForeignKey(f"{master_table}.id"), primary_key=True)
+        contact_id = Column(Integer, ForeignKey(f"{contact_table}.id"), primary_key=True)
