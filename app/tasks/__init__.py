@@ -40,9 +40,9 @@ _app_context = None
 
 def set_app_context(context: AppContext) -> None:
     global _app_context
-    _app_context = ContextVar(CONTEXT_KEY, default=context)
+    _app_context = _app_context.set(context) if _app_context else  ContextVar(CONTEXT_KEY, default=context)
 
 
 def get_app_context() -> ContextVar|None:
     global _app_context
-    return _app_context
+    return _app_context.get() if _app_context else None

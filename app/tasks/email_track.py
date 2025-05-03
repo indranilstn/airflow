@@ -14,13 +14,14 @@ from app.services.emails.base_email import EmailService as BaseService
 from app.services.emails.gmail import Gmail as GmailService
 from app.services.emails.raw_email import RawEmailHandler
 from app.services.contact import add_contact
+from app.services.location import get_location_id
 from app.orm.models.tracking_email import TrackerEmail
 from app.orm.models.events import Event, EventType
 from app.orm import get_session
 from . import AppContext, set_app_context
 
 USER_EMAIL = "indranil@softechnation.com"
-INFO_PATTERN = r"indranil\+([^\+]+)\+([^\+]+).*@softechnation.com"
+INFO_PATTERN = r"indranil\+([^\+]+)\+([^\+@]+).*@softechnation.com"
 
 class _SourceStruct(BaseModel):
     """Extract source from email subject"""
@@ -60,11 +61,12 @@ def fetch_email(service: BaseService) -> int:
 
             if re.search(r"indranil\+[^@]+@softechnation.com", header_str):
                 tracker = TrackerEmail(headers=headers, body=body, msg_id=msg_id)
-                with session.begin():
-                    session.add(tracker)
-                    session.commit()
+                session.add(tracker)
+                session.flush()
 
-                    tracker_id = tracker.id
+                tracker_id = tracker.id
+
+        session.commit()
 
     return tracker_id
 
@@ -81,6 +83,10 @@ def parse_email(tracking_id: int) -> AppContext:
     app_context = None
     primary_master_id = None
     secondary_master_id = None
+
+    def prepare_text(body_text: str|list) -> list:
+        return [body_text] if isinstance(body_text, str) else body_text
+
     with get_session() as session:
         tracker = session.scalar(
             select(TrackerEmail)
@@ -107,11 +113,21 @@ def parse_email(tracking_id: int) -> AppContext:
         body = tracker.body
         for part in body:
             output = None
-            if "text/plain" in part:
-                output = _parse_text_body([part['text/plain']])
+            if isinstance(part, str):
+                body_text = prepare_text(body[part])
+                match part:
+                    case "text/plain":
+                        output = _parse_text_body(body_text)
 
-            if "text/html" in part:
-                output = _parse_html_body([part['text/html']])
+                    case "text/html":
+                        output = _parse_html_body(body_text)
+
+            else:
+                if "text/plain" in part:
+                    output = _parse_text_body(prepare_text(part['text/plain']))
+
+                if "text/html" in part:
+                    output = _parse_html_body(prepare_text(part['text/html']))
 
             if output and output.email:
                 prospect = output
@@ -150,22 +166,24 @@ def parse_email(tracking_id: int) -> AppContext:
             if source_from_header:
                 prospect.source = source_from_header
 
-        app_context = AppContext(client=client)
+        app_context = AppContext(client=client, data={})
         set_app_context(app_context)
 
         try:
-            contact_id,
-            primary_master_id,
-            secondary_master_id = add_contact(prospect.name, prospect.email, prospect.phone)
+            contact_id, primary_master_id, secondary_master_id = add_contact(prospect.name, prospect.email, prospect.phone)
+
         except ValueError:
             raise ValueError(f"Invalid contact information in tracker email: {tracker.id}")
+
+        print(f"Location found in parse_email: {location}")
+        location_id = get_location_id(location)
 
         event = Event(
             type=EventType.EMAIL,
             contact_id=contact_id,
             source=prospect.source,
             unit_type=prospect.unit,
-            location_marker=location,
+            location_id=location_id,
             data={'location': prospect.location, 'address': prospect.address},
         )
 
@@ -177,8 +195,9 @@ def parse_email(tracking_id: int) -> AppContext:
         session.commit()
 
     if app_context:
-        app_context.data = {
+        app_context['data'] = {
             'event_id': event_id,
+            'location_id': location_id,
             'primary_master': primary_master_id,
             'secondary_master': secondary_master_id,
         }

@@ -1,9 +1,6 @@
-from sqlalchemy import insert, select
+from sqlalchemy import insert
 from sqlalchemy.exc import IntegrityError
 from app.orm import get_session
-from app.orm.models.locations import Location
-from app.orm.models.contacts import Contact
-from app.orm.models.events import Event
 from app.orm.models.lead_journey import LeadJourney
 from . import AppContext
 
@@ -24,27 +21,8 @@ def process_event(context: AppContext) -> AppContext:
     if not primary_master_id:
         raise Exception("Primary contact information not found")
 
-    select_stmt = select(
-        Event.type,
-        Event.location_marker.label("marker"),
-        Contact.id,
-        Contact.name,
-        Contact.email,
-        Contact.phone,
-    ).where(
-        Event.id == event_id
-    )
-
-    location_id = None
+    location_id = data.get("location_id")
     with get_session(context=context) as session:
-        row = session.execute(select_stmt).first()
-
-        location_id = session.scalar(select(Location.id).where(Location.marker == row['marker']))
-        if not location_id:
-            raise Exception("Location not found")
-
-        print(f"location id: {location_id}")
-
         try:
             session.execute(
                 insert(LeadJourney)
@@ -60,5 +38,5 @@ def process_event(context: AppContext) -> AppContext:
         except IntegrityError:
             pass
 
-    context['data'] = None
+    # context['data'] = None
     return context

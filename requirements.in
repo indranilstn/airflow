@@ -9,7 +9,6 @@ psycopg2
 pendulum
 graphviz
 pandas
-asgiref
 apprise
 nanoid
 google-api-python-client

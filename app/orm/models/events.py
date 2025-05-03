@@ -3,7 +3,9 @@ from sqlalchemy import Column, Integer, String, Enum as SqlEnum, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 from app.core.utility import enum_values_callable
 from .. import SQLBase
-from .base_temporal_update import TemporalModel
+from .base_temporal import TemporalModel
+from .contacts import tablename as contacts_tablename
+from .locations import tablename as locations_tablename
 
 try:
     from sqlmodel import Field # type: ignore import error
@@ -16,8 +18,8 @@ class EventType(Enum):
     BOOKING = "Booking"
 
 tablename = "events"
-_contacts_key = "contact.id"
-_locations_key = "locations.id"
+_contacts_key = f"{contacts_tablename}.id"
+_locations_key = f"{locations_tablename}.id"
 
 if sql_model_found:
     class Event(TemporalModel, table=True, metadata=SQLBase.metadata):
@@ -40,5 +42,5 @@ else:
         contact_id = Column(Integer, ForeignKey(_contacts_key), default=None)
         source = Column(String, default=None)
         unit_type = Column(String, default=None)
-        location_id = Column(String, ForeignKey(_locations_key), default=None)
+        location_id = Column(Integer, ForeignKey(_locations_key), default=None)
         data = Column(JSONB, default=None)

@@ -5,7 +5,7 @@ from app.orm.models.contacts import Contact
 from app.orm.models.contact_assoc import ContactAssoc
 from app.orm.models.contact_master import ContactMaster, ContactAssocType
 
-async def add_contact(name: str|None, email: str|None, phone: str|None) -> int|None:
+def add_contact(name: str|None, email: str|None, phone: str|None) -> tuple:
     # Validate input (at least one of email or phone should be provided)
     if not email and not phone:
         raise ValueError("At least one of email or phone must be provided")
@@ -19,6 +19,7 @@ async def add_contact(name: str|None, email: str|None, phone: str|None) -> int|N
             contact_id = contact.id
 
         except IntegrityError:
+            session.rollback()
             contact_id = session.scalar(
                 select(Contact.id).where(
                     Contact.name == name,
@@ -33,7 +34,7 @@ async def add_contact(name: str|None, email: str|None, phone: str|None) -> int|N
         master_email_id = None
         master_phone_id = None
         if email:
-            master_email_id = session.scalar(select(Contact.id).where(ContactMaster.value == email))
+            master_email_id = session.scalar(select(ContactMaster.id).where(ContactMaster.value == email))
             if not master_email_id:
                 try:
                     master_email_id = session.scalar(
@@ -41,10 +42,11 @@ async def add_contact(name: str|None, email: str|None, phone: str|None) -> int|N
                         .values(value=email, type=ContactAssocType.EMAIL)
                         .returning(ContactMaster.id)
                     )
-                    session.flush()
+                    # session.flush()
 
                 except IntegrityError:
-                    master_email_id = session.scalar(select(Contact.id).where(ContactMaster.value == email))
+                    session.rollback()
+                    master_email_id = session.scalar(select(ContactMaster.id).where(ContactMaster.value == email))
 
         if phone:
             master_phone_id = session.scalar(select(ContactMaster.id).where(ContactMaster.value == phone))
@@ -55,9 +57,10 @@ async def add_contact(name: str|None, email: str|None, phone: str|None) -> int|N
                         .values(value=phone, type=ContactAssocType.PHONE)
                         .returning(ContactMaster.id)
                     )
-                    session.flush()
+                    # session.flush()
 
                 except IntegrityError:
+                    session.rollback()
                     master_phone_id = session.scalar(select(ContactMaster.id).where(ContactMaster.value == phone))
 
         for master_id in [master_email_id, master_phone_id]:
@@ -69,8 +72,9 @@ async def add_contact(name: str|None, email: str|None, phone: str|None) -> int|N
                     )
 
                 except IntegrityError:
+                    session.rollback()
                     continue
 
         session.commit()
 
-    return contact_id, master_email_id or master_phone_id, master_phone_id if master_email_id else None
+    return contact_id, (master_email_id or master_phone_id), (master_phone_id if master_email_id else None)

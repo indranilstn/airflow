@@ -5,7 +5,6 @@ from sqlalchemy.sql import func
 
 try:
     from sqlmodel import SQLModel, Field # type: ignore import error
-    from datetime import datetime
     sql_model_found = True
 except ModuleNotFoundError:
     sql_model_found = False
